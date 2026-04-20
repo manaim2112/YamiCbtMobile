@@ -1,6 +1,12 @@
-# Welcome to your Expo app 👋
+# YamiCBT Mobile
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Android-focused React Native (Expo) app for the online exam platform at `https://cbt.mtssupel.sch.id`.
+
+## Features
+
+- **Device Readiness Check** — Verifies internet connectivity, camera availability, and minimum Android version before exam
+- **Lockdown Mode** — Enforces exam integrity by blocking back button, system gestures, and enabling fullscreen + DND
+- **WebView Integration** — Restricted navigation to `cbt.mtssupel.sch.id` only with camera access for proctoring
 
 ## Get started
 
@@ -16,35 +22,60 @@ This is an [Expo](https://expo.dev) project created with [`create-expo-app`](htt
    npx expo start
    ```
 
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+## Common Commands
 
 ```bash
-npm run reset-project
+# Start dev server
+npm run start
+
+# Run on Android
+npm run android
+
+# Run on iOS
+npm run ios
+
+# Run on web
+npm run web
+
+# Lint
+npm run lint
+
+# Test
+npm run test
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+## Release & Deployment
+
+See [docs/RELEASE_SETUP.md](docs/RELEASE_SETUP.md) for instructions on:
+- Generating keystore for signed builds
+- Configuring GitHub Secrets
+- Triggering releases via tags
+
+### Quick Release
+
+```bash
+# Patch release (1.0.4 -> 1.0.5)
+npm run release
+
+# Minor release (1.0.4 -> 1.1.0)
+npm run release:minor
+
+# Major release (1.0.4 -> 2.0.0)
+npm run release:major
+
+# Push tag to trigger build
+git push --follow-tags
+```
+
+## Tech Stack
+
+- **React Native** 0.81.5 with **Expo** ~54.0.33
+- **React** 19.1.0
+- **TypeScript** ~5.9.2
+- **Expo Router** ~6.0.23 (file-based routing)
+- New Architecture enabled
 
 ## Learn more
 
-To learn more about developing your project with Expo, look at the following resources:
-
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+- [Expo documentation](https://docs.expo.dev/)
+- [Expo Router documentation](https://docs.expo.dev/router/introduction/)

@@ -7,10 +7,11 @@ on:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.parallel=true"
 
 jobs:
   build:
-    name: EAS Build (APK + AAB)
+    name: Gradle Build (APK + AAB)
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -20,167 +21,87 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ── 2. Node.js 24 ────────────────────────────────────────────────────────
+      # ── 2. Setup Java 17 ─────────────────────────────────────────────────────
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      # ── 3. Setup Node.js 24 ──────────────────────────────────────────────────
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: npm
 
-      # ── 3. Install dependencies ──────────────────────────────────────────────
+      # ── 4. Install dependencies ──────────────────────────────────────────────
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
 
-      # ── 4. Setup EAS ─────────────────────────────────────────────────────────
-      - name: Setup EAS
-        uses: expo/expo-github-action@v8
-        with:
-          eas-version: latest
-          token: ${{ secrets.EXPO_TOKEN }}
+      # ── 5. Setup Gradle ──────────────────────────────────────────────────────
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
 
-      # ── 5. Build AAB ─────────────────────────────────────────────────────────
-      - name: Build AAB (release)
-        id: build_aab
+      # ── 6. Prebuild native Android project ───────────────────────────────────
+      - name: Prebuild Android project
+        run: npx expo prebuild --platform android --clean
+
+      # ── 7. Decode keystore from secrets ──────────────────────────────────────
+      - name: Decode keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
         run: |
-          eas build \
-            --platform android \
-            --profile release \
-            --non-interactive \
-            --json \
-            --wait \
-            > eas_aab_raw.txt 2>&1 || true
+          echo "$KEYSTORE_BASE64" | base64 -d > android/app/keystore.jks
 
-          echo "=== Raw EAS AAB output ==="
-          cat eas_aab_raw.txt
-
-          # Extract the last valid JSON line (EAS sometimes prints logs before JSON)
-          JSON_LINE=$(grep -o '\[.*\]\|\{.*\}' eas_aab_raw.txt | tail -1 || echo "")
-          echo "=== Extracted JSON ==="
-          echo "$JSON_LINE"
-
-          BUILD_URL=$(echo "$JSON_LINE" | jq -r '
-            if type == "array" then .[0].artifacts.buildUrl
-            elif type == "object" then .artifacts.buildUrl
-            else empty end // empty
-          ' 2>/dev/null || echo "")
-
-          echo "=== Build URL ==="
-          echo "$BUILD_URL"
-          echo "aab_url=$BUILD_URL" >> "$GITHUB_OUTPUT"
-
-      # ── 6. Build APK ─────────────────────────────────────────────────────────
-      - name: Build APK (release-apk)
-        id: build_apk
+      # ── 8. Create keystore config ────────────────────────────────────────────
+      - name: Create keystore config
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          eas build \
-            --platform android \
-            --profile release-apk \
-            --non-interactive \
-            --json \
-            --wait \
-            > eas_apk_raw.txt 2>&1 || true
+          cat > android/keystore.properties << EOF
+          storePassword=$KEYSTORE_PASSWORD
+          keyPassword=$KEY_PASSWORD
+          keyAlias=$KEY_ALIAS
+          storeFile=app/keystore.jks
+          EOF
 
-          echo "=== Raw EAS APK output ==="
-          cat eas_apk_raw.txt
+      # ── 9. Build Release APK ────────────────────────────────────────────────
+      - name: Build Release APK
+        working-directory: android
+        run: ./gradlew assembleRelease
 
-          JSON_LINE=$(grep -o '\[.*\]\|\{.*\}' eas_apk_raw.txt | tail -1 || echo "")
-          echo "=== Extracted JSON ==="
-          echo "$JSON_LINE"
+      # ── 10. Build Release AAB ───────────────────────────────────────────────
+      - name: Build Release AAB
+        working-directory: android
+        run: ./gradlew bundleRelease
 
-          BUILD_URL=$(echo "$JSON_LINE" | jq -r '
-            if type == "array" then .[0].artifacts.buildUrl
-            elif type == "object" then .artifacts.buildUrl
-            else empty end // empty
-          ' 2>/dev/null || echo "")
-
-          echo "=== Build URL ==="
-          echo "$BUILD_URL"
-          echo "apk_url=$BUILD_URL" >> "$GITHUB_OUTPUT"
-
-      # ── 7. Fallback: query EAS API for latest build URLs ─────────────────────
-      # Runs only if URL extraction above failed
-      - name: Fallback — fetch build URLs from EAS API
-        id: fallback_urls
-        if: steps.build_aab.outputs.aab_url == '' || steps.build_apk.outputs.apk_url == ''
+      # ── 11. Rename artifacts ────────────────────────────────────────────────
+      - name: Rename artifacts
         run: |
-          # Get the 4 most recent Android builds for this project
-          BUILDS=$(eas build:list \
-            --platform android \
-            --limit 4 \
-            --json \
-            --non-interactive \
-            2>/dev/null || echo "[]")
+          mv android/app/build/outputs/apk/release/app-release.apk \
+            yamicbtmobile-${{ github.ref_name }}.apk
+          mv android/app/build/outputs/bundle/release/app-release.aab \
+            yamicbtmobile-${{ github.ref_name }}.aab
+          ls -lh yamicbtmobile-*
 
-          echo "=== Recent builds ==="
-          echo "$BUILDS" | jq '.'
-
-          AAB_URL=$(echo "$BUILDS" | jq -r '
-            [.[] | select(.platform == "ANDROID" and .buildProfile == "release")]
-            | .[0].artifacts.buildUrl // empty
-          ' 2>/dev/null || echo "")
-
-          APK_URL=$(echo "$BUILDS" | jq -r '
-            [.[] | select(.platform == "ANDROID" and .buildProfile == "release-apk")]
-            | .[0].artifacts.buildUrl // empty
-          ' 2>/dev/null || echo "")
-
-          echo "Fallback AAB URL: $AAB_URL"
-          echo "Fallback APK URL: $APK_URL"
-
-          # Override only if original is empty
-          if [ -z "${{ steps.build_aab.outputs.aab_url }}" ] && [ -n "$AAB_URL" ]; then
-            echo "aab_url=$AAB_URL" >> "$GITHUB_OUTPUT"
-          else
-            echo "aab_url=${{ steps.build_aab.outputs.aab_url }}" >> "$GITHUB_OUTPUT"
-          fi
-
-          if [ -z "${{ steps.build_apk.outputs.apk_url }}" ] && [ -n "$APK_URL" ]; then
-            echo "apk_url=$APK_URL" >> "$GITHUB_OUTPUT"
-          else
-            echo "apk_url=${{ steps.build_apk.outputs.apk_url }}" >> "$GITHUB_OUTPUT"
-          fi
-
-      # ── 8. Resolve final URLs ─────────────────────────────────────────────────
-      - name: Resolve final artifact URLs
-        id: urls
-        run: |
-          AAB="${{ steps.fallback_urls.outputs.aab_url || steps.build_aab.outputs.aab_url }}"
-          APK="${{ steps.fallback_urls.outputs.apk_url || steps.build_apk.outputs.apk_url }}"
-          echo "aab_url=$AAB" >> "$GITHUB_OUTPUT"
-          echo "apk_url=$APK" >> "$GITHUB_OUTPUT"
-          echo "Final AAB: $AAB"
-          echo "Final APK: $APK"
-
-      # ── 9. Download artifacts ─────────────────────────────────────────────────
-      - name: Download AAB
-        if: steps.urls.outputs.aab_url != ''
-        run: |
-          curl -fL "${{ steps.urls.outputs.aab_url }}" \
-            -o "yamicbtmobile-${{ github.ref_name }}.aab"
-          ls -lh "yamicbtmobile-${{ github.ref_name }}.aab"
-
-      - name: Download APK
-        if: steps.urls.outputs.apk_url != ''
-        run: |
-          curl -fL "${{ steps.urls.outputs.apk_url }}" \
-            -o "yamicbtmobile-${{ github.ref_name }}.apk"
-          ls -lh "yamicbtmobile-${{ github.ref_name }}.apk"
-
-      # ── 10. Release notes ─────────────────────────────────────────────────────
+      # ── 12. Get release notes ───────────────────────────────────────────────
       - name: Get release notes
         id: release_notes
         run: |
           TAG="${{ github.ref_name }}"
           NOTES=""
           if [ -f CHANGELOG.md ]; then
-            NOTES=$(awk "/^## \[?${TAG#v}\]?/{found=1; next} found && /^## /{exit} found{print}" CHANGELOG.md)
+            NOTES=$(awk "/^## \\[?${TAG#v}\\]?/{found=1; next} found && /^## /{exit} found{print}" CHANGELOG.md)
           fi
           [ -z "$NOTES" ] && NOTES="Release ${TAG}"
           echo "notes<<EOF" >> "$GITHUB_OUTPUT"
           echo "$NOTES" >> "$GITHUB_OUTPUT"
           echo "EOF" >> "$GITHUB_OUTPUT"
 
-      # ── 11. Create GitHub Release ─────────────────────────────────────────────
+      # ── 13. Create GitHub Release ───────────────────────────────────────────
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -189,6 +110,6 @@ jobs:
           draft: false
           prerelease: ${{ contains(github.ref_name, '-') }}
           files: |
-            yamicbtmobile-${{ github.ref_name }}.aab
             yamicbtmobile-${{ github.ref_name }}.apk
+            yamicbtmobile-${{ github.ref_name }}.aab
           fail_on_unmatched_files: false
