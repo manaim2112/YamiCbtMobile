@@ -2,7 +2,7 @@
   "expo": {
     "name": "YamiCbtMobile",
     "slug": "YamiCbtMobile",
-    "version": "1.0.4",
+    "version": "1.0.5",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "yamicbtmobile",
@@ -28,7 +28,7 @@
         "android.permission.ACCESS_NOTIFICATION_POLICY",
         "android.permission.RECORD_AUDIO"
       ],
-      "versionCode": 1000004
+      "versionCode": 1000005
     },
     "web": {
       "output": "static",
