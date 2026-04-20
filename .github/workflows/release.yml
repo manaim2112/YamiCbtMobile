@@ -1,0 +1,102 @@
+name: Build & Release Android
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  build:
+    name: EAS Build (APK + AAB)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # needed to create GitHub Release
+
+    steps:
+      # ── 1. Checkout ──────────────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── 2. Node.js ───────────────────────────────────────────────────────────
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # ── 3. Install dependencies ──────────────────────────────────────────────
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      # ── 4. Setup Expo / EAS ──────────────────────────────────────────────────
+      - name: Setup EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      # ── 5. Build AAB (release) ───────────────────────────────────────────────
+      - name: Build AAB (release)
+        id: build_aab
+        run: |
+          BUILD_URL=$(eas build \
+            --platform android \
+            --profile release \
+            --non-interactive \
+            --json \
+            --no-wait=false \
+            | jq -r '.[0].artifacts.buildUrl // empty')
+          echo "aab_url=$BUILD_URL" >> "$GITHUB_OUTPUT"
+
+      # ── 6. Build APK (release-apk) ───────────────────────────────────────────
+      - name: Build APK (release-apk)
+        id: build_apk
+        run: |
+          BUILD_URL=$(eas build \
+            --platform android \
+            --profile release-apk \
+            --non-interactive \
+            --json \
+            --no-wait=false \
+            | jq -r '.[0].artifacts.buildUrl // empty')
+          echo "apk_url=$BUILD_URL" >> "$GITHUB_OUTPUT"
+
+      # ── 7. Download artifacts ────────────────────────────────────────────────
+      - name: Download AAB
+        run: |
+          curl -L "${{ steps.build_aab.outputs.aab_url }}" -o yamicbtmobile-${{ github.ref_name }}.aab
+        if: steps.build_aab.outputs.aab_url != ''
+
+      - name: Download APK
+        run: |
+          curl -L "${{ steps.build_apk.outputs.apk_url }}" -o yamicbtmobile-${{ github.ref_name }}.apk
+        if: steps.build_apk.outputs.apk_url != ''
+
+      # ── 8. Extract tag notes from CHANGELOG (optional, graceful fallback) ────
+      - name: Get release notes
+        id: release_notes
+        run: |
+          TAG="${{ github.ref_name }}"
+          if [ -f CHANGELOG.md ]; then
+            NOTES=$(awk "/^## \[?${TAG#v}\]?/{found=1; next} found && /^## /{exit} found{print}" CHANGELOG.md)
+          fi
+          if [ -z "$NOTES" ]; then
+            NOTES="Release ${TAG}"
+          fi
+          # Escape multiline for GITHUB_OUTPUT
+          echo "notes<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$NOTES" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      # ── 9. Create GitHub Release ─────────────────────────────────────────────
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "YamiCBT Mobile ${{ github.ref_name }}"
+          body: ${{ steps.release_notes.outputs.notes }}
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }} # e.g. v1.0.0-beta → prerelease
+          files: |
+            yamicbtmobile-${{ github.ref_name }}.aab
+            yamicbtmobile-${{ github.ref_name }}.apk
+          fail_on_unmatched_files: false
