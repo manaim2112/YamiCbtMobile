@@ -39,51 +39,61 @@ jobs:
       - name: Build AAB (release)
         id: build_aab
         run: |
-          BUILD_URL=$(eas build \
+          # Run EAS build, wait for completion, output JSON to file
+          eas build \
             --platform android \
             --profile release \
             --non-interactive \
             --json \
-            --no-wait=false \
-            | jq -r '.[0].artifacts.buildUrl // empty')
+            --wait \
+            2>/dev/null > eas_aab_output.json || true
+
+          # Extract build URL from JSON array
+          BUILD_URL=$(jq -r 'if type == "array" then .[0].artifacts.buildUrl else .artifacts.buildUrl end // empty' eas_aab_output.json 2>/dev/null || echo "")
           echo "aab_url=$BUILD_URL" >> "$GITHUB_OUTPUT"
+          echo "AAB build URL: $BUILD_URL"
 
       # ── 6. Build APK (release-apk) ───────────────────────────────────────────
       - name: Build APK (release-apk)
         id: build_apk
         run: |
-          BUILD_URL=$(eas build \
+          eas build \
             --platform android \
             --profile release-apk \
             --non-interactive \
             --json \
-            --no-wait=false \
-            | jq -r '.[0].artifacts.buildUrl // empty')
+            --wait \
+            2>/dev/null > eas_apk_output.json || true
+
+          BUILD_URL=$(jq -r 'if type == "array" then .[0].artifacts.buildUrl else .artifacts.buildUrl end // empty' eas_apk_output.json 2>/dev/null || echo "")
           echo "apk_url=$BUILD_URL" >> "$GITHUB_OUTPUT"
+          echo "APK build URL: $BUILD_URL"
 
       # ── 7. Download artifacts ────────────────────────────────────────────────
       - name: Download AAB
-        run: |
-          curl -L "${{ steps.build_aab.outputs.aab_url }}" -o yamicbtmobile-${{ github.ref_name }}.aab
         if: steps.build_aab.outputs.aab_url != ''
+        run: |
+          curl -L "${{ steps.build_aab.outputs.aab_url }}" \
+            -o "yamicbtmobile-${{ github.ref_name }}.aab"
 
       - name: Download APK
-        run: |
-          curl -L "${{ steps.build_apk.outputs.apk_url }}" -o yamicbtmobile-${{ github.ref_name }}.apk
         if: steps.build_apk.outputs.apk_url != ''
+        run: |
+          curl -L "${{ steps.build_apk.outputs.apk_url }}" \
+            -o "yamicbtmobile-${{ github.ref_name }}.apk"
 
-      # ── 8. Extract tag notes from CHANGELOG (optional, graceful fallback) ────
+      # ── 8. Extract release notes from CHANGELOG (optional) ───────────────────
       - name: Get release notes
         id: release_notes
         run: |
           TAG="${{ github.ref_name }}"
+          NOTES=""
           if [ -f CHANGELOG.md ]; then
             NOTES=$(awk "/^## \[?${TAG#v}\]?/{found=1; next} found && /^## /{exit} found{print}" CHANGELOG.md)
           fi
           if [ -z "$NOTES" ]; then
             NOTES="Release ${TAG}"
           fi
-          # Escape multiline for GITHUB_OUTPUT
           echo "notes<<EOF" >> "$GITHUB_OUTPUT"
           echo "$NOTES" >> "$GITHUB_OUTPUT"
           echo "EOF" >> "$GITHUB_OUTPUT"
@@ -95,7 +105,7 @@ jobs:
           name: "YamiCBT Mobile ${{ github.ref_name }}"
           body: ${{ steps.release_notes.outputs.notes }}
           draft: false
-          prerelease: ${{ contains(github.ref_name, '-') }} # e.g. v1.0.0-beta → prerelease
+          prerelease: ${{ contains(github.ref_name, '-') }}
           files: |
             yamicbtmobile-${{ github.ref_name }}.aab
             yamicbtmobile-${{ github.ref_name }}.apk
