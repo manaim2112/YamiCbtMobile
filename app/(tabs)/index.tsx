@@ -1,98 +1,229 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import React, { useEffect, useState } from 'react';
+import {
+    ActivityIndicator,
+    Pressable,
+    StyleSheet,
+    View
+} from 'react-native';
 
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+import {
+    allChecksPassed,
+    ReadinessCheckResults,
+    runAllChecks,
+} from '@/modules/readiness-checker';
 
 export default function HomeScreen() {
-  return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+  const router = useRouter();
+  const [checks, setChecks] = useState<ReadinessCheckResults | null>(null);
+  const [isChecking, setIsChecking] = useState(true);
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
+  useEffect(() => {
+    runChecks();
+  }, []);
+
+  const runChecks = async () => {
+    setIsChecking(true);
+    const results = await runAllChecks();
+    setChecks(results);
+    setIsChecking(false);
+  };
+
+  const handleStart = () => {
+    router.replace('/webview');
+  };
+
+  const allPassed = checks ? allChecksPassed(checks) : false;
+
+  return (
+    <ThemedView style={styles.container}>
+      <View style={styles.content}>
+        {/* Header */}
+        <ThemedText type="title" style={styles.title}>
+          YamiCBT Mobile
         </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
+        <ThemedText style={styles.subtitle}>
+          Persiapan Sebelum Ujian
         </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+
+        {/* Loading state */}
+        {isChecking && (
+          <View style={styles.checkContainer}>
+            <ActivityIndicator size="large" color="#1a73e8" />
+            <ThemedText style={styles.loadingText}>
+              Memeriksa perangkat...
+            </ThemedText>
+          </View>
+        )}
+
+        {/* Check results */}
+        {!isChecking && checks && (
+          <View style={styles.checkContainer}>
+            <CheckItem
+              label="Koneksi Internet"
+              passed={checks.internet.passed}
+              message={checks.internet.message}
+            />
+            <CheckItem
+              label="Kamera"
+              passed={checks.camera.passed}
+              message={checks.camera.message}
+            />
+            <CheckItem
+              label="Versi Android"
+              passed={checks.androidVersion.passed}
+              message={checks.androidVersion.message}
+            />
+          </View>
+        )}
+
+        {/* Start button */}
+        {!isChecking && (
+          <Pressable
+            style={[styles.button, !allPassed && styles.buttonDisabled]}
+            onPress={handleStart}
+            disabled={!allPassed}
+          >
+            <ThemedText
+              style={[styles.buttonText, !allPassed && styles.buttonTextDisabled]}
+            >
+              Mulai
+            </ThemedText>
+          </Pressable>
+        )}
+
+        {/* Retry button */}
+        {!isChecking && !allPassed && (
+          <Pressable style={styles.retryButton} onPress={runChecks}>
+            <ThemedText style={styles.retryButtonText}>Periksa Ulang</ThemedText>
+          </Pressable>
+        )}
+
+        {/* Info */}
+        <ThemedText style={styles.info}>
+          Pastikan semua pemeriksaan berhasil sebelum memulai ujian.
+        </ThemedText>
+      </View>
+    </ThemedView>
   );
 }
 
+// ─── Check Item Component ─────────────────────────────────────────────────────
+
+interface CheckItemProps {
+  label: string;
+  passed: boolean;
+  message: string;
+}
+
+function CheckItem({ label, passed, message }: CheckItemProps) {
+  return (
+    <View style={styles.checkItem}>
+      <View style={styles.checkItemHeader}>
+        <Ionicons
+          name={passed ? 'checkmark-circle' : 'close-circle'}
+          size={24}
+          color={passed ? '#34a853' : '#ea4335'}
+        />
+        <ThemedText style={styles.checkItemLabel}>{label}</ThemedText>
+      </View>
+      <ThemedText style={styles.checkItemMessage}>{message}</ThemedText>
+    </View>
+  );
+}
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
-  titleContainer: {
+  container: {
+    flex: 1,
+  },
+  content: {
+    flex: 1,
+    padding: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: '700',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  subtitle: {
+    fontSize: 16,
+    color: '#666666',
+    marginBottom: 32,
+    textAlign: 'center',
+  },
+  checkContainer: {
+    width: '100%',
+    marginBottom: 24,
+    gap: 12,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: '#666666',
+    textAlign: 'center',
+  },
+  checkItem: {
+    backgroundColor: '#f8f9fa',
+    borderRadius: 12,
+    padding: 16,
+    width: '100%',
+  },
+  checkItemHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    marginBottom: 4,
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
+  checkItemLabel: {
+    fontSize: 16,
+    fontWeight: '600',
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  checkItemMessage: {
+    fontSize: 13,
+    color: '#666666',
+    marginLeft: 32,
+  },
+  button: {
+    backgroundColor: '#1a73e8',
+    paddingVertical: 16,
+    paddingHorizontal: 48,
+    borderRadius: 12,
+    minWidth: 200,
+    alignItems: 'center',
+  },
+  buttonDisabled: {
+    backgroundColor: '#e0e0e0',
+  },
+  buttonText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#ffffff',
+  },
+  buttonTextDisabled: {
+    color: '#999999',
+  },
+  retryButton: {
+    marginTop: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+  },
+  retryButtonText: {
+    fontSize: 14,
+    color: '#1a73e8',
+    fontWeight: '500',
+  },
+  info: {
+    marginTop: 24,
+    fontSize: 12,
+    color: '#999999',
+    textAlign: 'center',
   },
 });

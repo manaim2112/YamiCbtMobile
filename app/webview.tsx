@@ -1,11 +1,14 @@
-import React, { useEffect, useRef, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
+import { NavigationBar } from 'expo-navigation-bar';
+import { setStatusBarHidden, StatusBar } from 'expo-status-bar';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Modal,
     Pressable,
     StyleSheet,
     Text,
-    View
+    View,
 } from 'react-native';
 import WebView from 'react-native-webview';
 
