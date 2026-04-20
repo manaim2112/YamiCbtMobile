@@ -86,15 +86,29 @@ export function isUrlLocked(url: string): boolean {
     const parsed = new URL(url);
     const pathname = parsed.pathname;
 
+    // Log untuk debugging
+    console.log('[isUrlLocked] Checking URL:', url, 'pathname:', pathname);
+
+    // Check if pathname matches any login path
     for (const loginPath of APP_CONFIG.LOGIN_PATHS) {
-      if (pathname === loginPath || pathname.startsWith(loginPath)) {
+      // Exact match or starts with login path followed by something
+      if (pathname === loginPath) {
+        console.log('[isUrlLocked] Matched login path:', loginPath, '-> NOT LOCKED');
         return false;
       }
     }
 
+    // If pathname is exactly '/', it's the root/login page
+    if (pathname === '/' || pathname === '') {
+      console.log('[isUrlLocked] Root path -> NOT LOCKED');
+      return false;
+    }
+
+    console.log('[isUrlLocked] No match -> LOCKED');
     return true;
-  } catch {
+  } catch (e) {
     // Malformed URL — default to locked (safe fallback)
+    console.log('[isUrlLocked] Parse error:', e, '-> LOCKED');
     return true;
   }
 }

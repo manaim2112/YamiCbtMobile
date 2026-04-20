@@ -57,7 +57,10 @@ export default function WebViewScreen() {
   // ─── URL change handler ────────────────────────────────────────────────────
 
   const handleUrlChange = (url: string): void => {
+    console.log('[WebViewScreen] URL changed:', url);
+    
     const locked = isUrlLocked(url);
+    console.log('[WebViewScreen] Is locked:', locked);
 
     if (locked && !isLockdownActive) {
       activateLockdown({ onBackBlocked, onBackground });
@@ -68,9 +71,21 @@ export default function WebViewScreen() {
     }
   };
 
-  // ─── Load error handler ────────────────────────────────────────────────────
+  // ─── Load handlers ─────────────────────────────────────────────────────────
+
+  const handleLoadStart = (): void => {
+    console.log('[WebViewScreen] Load start');
+    setIsLoading(true);
+    setHasError(false);
+  };
+
+  const handleLoadEnd = (): void => {
+    console.log('[WebViewScreen] Load end');
+    setIsLoading(false);
+  };
 
   const handleLoadError = (): void => {
+    console.log('[WebViewScreen] Load error');
     setHasError(true);
     setIsLoading(false);
   };
@@ -101,17 +116,14 @@ export default function WebViewScreen() {
           ref={webViewRef}
           onUrlChange={handleUrlChange}
           onLoadError={handleLoadError}
-          onLoadStart={() => {
-            setIsLoading(true);
-            setHasError(false);
-          }}
-          onLoadEnd={() => setIsLoading(false)}
+          onLoadStart={handleLoadStart}
+          onLoadEnd={handleLoadEnd}
         />
       </View>
 
-      {/* Loading indicator */}
+      {/* Loading indicator - only show on initial load or error retry */}
       {isLoading && !hasError && (
-        <View style={styles.overlay}>
+        <View style={styles.overlay} pointerEvents="none">
           <ActivityIndicator size="large" color="#1a73e8" />
           <Text style={styles.loadingText}>Memuat halaman...</Text>
         </View>

@@ -67,6 +67,23 @@ npm run release:major
 git push --follow-tags
 ```
 
+## Customization
+
+### App Icon & Splash Screen
+
+Ganti file berikut dengan logo Anda:
+
+| File | Ukuran | Keterangan |
+|------|--------|------------|
+| `assets/images/icon.png` | 1024x1024 px | App icon utama |
+| `assets/images/splash-icon.png` | 200x200 px | Logo di splash screen |
+| `assets/images/favicon.png` | 48x48 px | Favicon web |
+| `assets/images/android-icon-foreground.png` | 1024x1024 px | Adaptive icon foreground |
+| `assets/images/android-icon-background.png` | 1024x1024 px | Adaptive icon background |
+| `assets/images/android-icon-monochrome.png` | 1024x1024 px | Adaptive icon monochrome |
+
+**Tips:** Gunakan [icon.kitchen](https://icon.kitchen/) untuk generate semua varian secara otomatis.
+
 ## Tech Stack
 
 - **React Native** 0.81.5 with **Expo** ~54.0.33

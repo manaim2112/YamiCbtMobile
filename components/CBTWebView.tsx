@@ -58,23 +58,34 @@ const CBTWebView = forwardRef<WebView, CBTWebViewProps>(
       request: ShouldStartLoadRequest,
     ): boolean => {
       const result = evaluateNavigation(request.url, TARGET_DOMAIN);
+      
+      // Log untuk debugging
+      if (!result.allowed) {
+        console.log('[CBTWebView] Blocked navigation to:', request.url);
+      }
+      
       return result.allowed;
     };
 
     // Detect URL changes and propagate to parent
     const handleNavigationStateChange = (navState: WebViewNavigation): void => {
+      // Log untuk debugging
+      console.log('[CBTWebView] Navigation state:', navState.url, 'loading:', navState.loading);
+      
       if (navState.url) {
         onUrlChange(navState.url);
       }
     };
 
     // Network / resource error
-    const handleError = (_event: WebViewErrorEvent): void => {
+    const handleError = (event: WebViewErrorEvent): void => {
+      console.log('[CBTWebView] Error:', event.nativeEvent);
       onLoadError();
     };
 
     // HTTP error (4xx, 5xx)
-    const handleHttpError = (_event: WebViewHttpErrorEvent): void => {
+    const handleHttpError = (event: WebViewHttpErrorEvent): void => {
+      console.log('[CBTWebView] HTTP Error:', event.nativeEvent.statusCode);
       onLoadError();
     };
 
@@ -86,6 +97,10 @@ const CBTWebView = forwardRef<WebView, CBTWebViewProps>(
           // JavaScript & storage
           javaScriptEnabled={true}
           domStorageEnabled={true}
+          // PENTING: Enable cookie persistence
+          thirdPartyCookiesEnabled={true}
+          cacheEnabled={true}
+          incognito={false}
           // Disable zoom
           scalesPageToFit={false}
           textZoom={100}
@@ -97,6 +112,8 @@ const CBTWebView = forwardRef<WebView, CBTWebViewProps>(
           // Security / navigation
           geolocationEnabled={false}
           allowsBackForwardNavigationGestures={false}
+          // User agent (biar tidak dianggap bot)
+          userAgent="Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36 YamiCBTMobile/1.0"
           // Handlers
           onShouldStartLoadWithRequest={handleShouldStartLoadWithRequest}
           onNavigationStateChange={handleNavigationStateChange}
