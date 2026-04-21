@@ -1,10 +1,11 @@
-import React, { forwardRef } from 'react';
+import React, { forwardRef, useCallback } from 'react';
 import { StyleSheet, View } from 'react-native';
 import WebView, {
     ShouldStartLoadRequest,
     WebViewErrorEvent,
     WebViewHttpErrorEvent,
     WebViewNavigation,
+    WebViewProgressEvent,
 } from 'react-native-webview';
 
 import { APP_CONFIG } from '@/constants/config';
@@ -21,18 +22,11 @@ export interface NavigationGuardResult {
 export interface CBTWebViewProps {
   onUrlChange: (url: string) => void;
   onLoadError: () => void;
-  onLoadStart?: () => void;
-  onLoadEnd?: () => void;
+  onLoadingChange: (loading: boolean) => void;
 }
 
 // ─── Helper: evaluateNavigation ──────────────────────────────────────────────
 
-/**
- * Evaluates whether a URL is allowed to load in the WebView.
- *
- * Returns `allowed: true` only when the URL's hostname exactly matches
- * `targetDomain`. Malformed URLs and all external domains are blocked.
- */
 export function evaluateNavigation(
   url: string,
   targetDomain: string,
@@ -44,7 +38,6 @@ export function evaluateNavigation(
     }
     return { allowed: false, reason: 'external_domain' };
   } catch {
-    // Malformed URL — block it
     return { allowed: false, reason: 'external_domain' };
   }
 }
@@ -52,42 +45,44 @@ export function evaluateNavigation(
 // ─── Component ───────────────────────────────────────────────────────────────
 
 const CBTWebView = forwardRef<WebView, CBTWebViewProps>(
-  ({ onUrlChange, onLoadError, onLoadStart, onLoadEnd }, ref) => {
-    // Navigation guard — block all external domains
-    const handleShouldStartLoadWithRequest = (
-      request: ShouldStartLoadRequest,
-    ): boolean => {
-      const result = evaluateNavigation(request.url, TARGET_DOMAIN);
-      
-      // Log untuk debugging
-      if (!result.allowed) {
-        console.log('[CBTWebView] Blocked navigation to:', request.url);
-      }
-      
-      return result.allowed;
-    };
-
-    // Detect URL changes and propagate to parent
-    const handleNavigationStateChange = (navState: WebViewNavigation): void => {
-      // Log untuk debugging
-      console.log('[CBTWebView] Navigation state:', navState.url, 'loading:', navState.loading);
+  ({ onUrlChange, onLoadError, onLoadingChange }, ref) => {
+    
+    // Navigation state change - primary loading tracker
+    const handleNavigationStateChange = useCallback((navState: WebViewNavigation): void => {
+      onLoadingChange(navState.loading);
       
       if (navState.url) {
         onUrlChange(navState.url);
       }
-    };
+    }, [onLoadingChange, onUrlChange]);
 
-    // Network / resource error
-    const handleError = (event: WebViewErrorEvent): void => {
-      console.log('[CBTWebView] Error:', event.nativeEvent);
+    // Load progress - secondary tracker
+    const handleLoadProgress = useCallback((event: WebViewProgressEvent): void => {
+      // When progress reaches 1, consider it loaded
+      if (event.nativeEvent.progress >= 1) {
+        onLoadingChange(false);
+      }
+    }, [onLoadingChange]);
+
+    // Navigation guard — block all external domains
+    const handleShouldStartLoadWithRequest = useCallback(
+      (request: ShouldStartLoadRequest): boolean => {
+        const result = evaluateNavigation(request.url, TARGET_DOMAIN);
+        return result.allowed;
+      },
+      [],
+    );
+
+    // Error handlers
+    const handleError = useCallback((event: WebViewErrorEvent): void => {
+      console.log('[CBTWebView] Error:', event.nativeEvent.code);
       onLoadError();
-    };
+    }, [onLoadError]);
 
-    // HTTP error (4xx, 5xx)
-    const handleHttpError = (event: WebViewHttpErrorEvent): void => {
+    const handleHttpError = useCallback((event: WebViewHttpErrorEvent): void => {
       console.log('[CBTWebView] HTTP Error:', event.nativeEvent.statusCode);
       onLoadError();
-    };
+    }, [onLoadError]);
 
     return (
       <View style={styles.container}>
@@ -97,7 +92,6 @@ const CBTWebView = forwardRef<WebView, CBTWebViewProps>(
           // JavaScript & storage
           javaScriptEnabled={true}
           domStorageEnabled={true}
-          // PENTING: Enable cookie persistence
           thirdPartyCookiesEnabled={true}
           cacheEnabled={true}
           incognito={false}
@@ -112,15 +106,14 @@ const CBTWebView = forwardRef<WebView, CBTWebViewProps>(
           // Security / navigation
           geolocationEnabled={false}
           allowsBackForwardNavigationGestures={false}
-          // User agent (biar tidak dianggap bot)
+          // User agent
           userAgent="Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36 YamiCBTMobile/1.0"
           // Handlers
           onShouldStartLoadWithRequest={handleShouldStartLoadWithRequest}
           onNavigationStateChange={handleNavigationStateChange}
+          onLoadProgress={handleLoadProgress}
           onError={handleError}
           onHttpError={handleHttpError}
-          onLoadStart={onLoadStart}
-          onLoadEnd={onLoadEnd}
           style={styles.webview}
         />
       </View>

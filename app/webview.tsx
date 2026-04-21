@@ -24,6 +24,7 @@ import {
 
 export default function WebViewScreen() {
   const webViewRef = useRef<WebView>(null);
+  const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const { isLockdownActive, setLockdownActive } = useLockdown();
 
@@ -32,7 +33,6 @@ export default function WebViewScreen() {
   const [showBackgroundWarning, setShowBackgroundWarning] = useState(false);
 
   // Re-apply immersive mode whenever this screen comes back into focus
-  // (e.g. after DND permission Settings screen closes)
   useFocusEffect(
     useCallback(() => {
       if (isLockdownActive) {
@@ -57,10 +57,7 @@ export default function WebViewScreen() {
   // ─── URL change handler ────────────────────────────────────────────────────
 
   const handleUrlChange = (url: string): void => {
-    console.log('[WebViewScreen] URL changed:', url);
-    
     const locked = isUrlLocked(url);
-    console.log('[WebViewScreen] Is locked:', locked);
 
     if (locked && !isLockdownActive) {
       activateLockdown({ onBackBlocked, onBackground });
@@ -71,21 +68,29 @@ export default function WebViewScreen() {
     }
   };
 
-  // ─── Load handlers ─────────────────────────────────────────────────────────
+  // ─── Loading state handler ─────────────────────────────────────────────────
 
-  const handleLoadStart = (): void => {
-    console.log('[WebViewScreen] Load start');
-    setIsLoading(true);
-    setHasError(false);
+  const handleLoadingChange = (loading: boolean): void => {
+    // Clear any existing timeout
+    if (loadingTimeoutRef.current) {
+      clearTimeout(loadingTimeoutRef.current);
+      loadingTimeoutRef.current = null;
+    }
+
+    if (loading) {
+      setIsLoading(true);
+      setHasError(false);
+    } else {
+      // Small delay before hiding loading to ensure page is fully rendered
+      loadingTimeoutRef.current = setTimeout(() => {
+        setIsLoading(false);
+      }, 300);
+    }
   };
 
-  const handleLoadEnd = (): void => {
-    console.log('[WebViewScreen] Load end');
-    setIsLoading(false);
-  };
+  // ─── Load error handler ────────────────────────────────────────────────────
 
   const handleLoadError = (): void => {
-    console.log('[WebViewScreen] Load error');
     setHasError(true);
     setIsLoading(false);
   };
@@ -102,6 +107,9 @@ export default function WebViewScreen() {
 
   useEffect(() => {
     return () => {
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+      }
       deactivateLockdown();
     };
   }, []);
@@ -116,12 +124,11 @@ export default function WebViewScreen() {
           ref={webViewRef}
           onUrlChange={handleUrlChange}
           onLoadError={handleLoadError}
-          onLoadStart={handleLoadStart}
-          onLoadEnd={handleLoadEnd}
+          onLoadingChange={handleLoadingChange}
         />
       </View>
 
-      {/* Loading indicator - only show on initial load or error retry */}
+      {/* Loading indicator - only show when loading AND not showing error */}
       {isLoading && !hasError && (
         <View style={styles.overlay} pointerEvents="none">
           <ActivityIndicator size="large" color="#1a73e8" />
